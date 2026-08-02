@@ -29,6 +29,19 @@ class Settings(BaseSettings):
     # LLM (used starting phase 3/4)
     anthropic_api_key: str = ""
 
+    # Embeddings (used starting phase 2)
+    voyage_api_key: str = ""
+    embedding_model: str = "voyage-3"
+    embedding_dimension: int = 1024
+
+    # File storage
+    upload_dir: str = "/app/uploads"
+    max_upload_size_bytes: int = 10 * 1024 * 1024  # 10 MB
+
+    # Chunking
+    chunk_size_chars: int = 3000  # ~750 tokens at ~4 chars/token
+    chunk_overlap_chars: int = 300
+
     @property
     def is_production(self) -> bool:
         return self.environment.lower() == "production"
