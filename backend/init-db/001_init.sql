@@ -58,7 +58,8 @@ CREATE INDEX idx_documents_tenant_status ON documents(tenant_id, status);
 
 -- ----------------------------------------------------------------------------
 -- chunks: embedded chunks of a document, used for RAG retrieval.
--- vector(1536) sized for common embedding models; adjust if you pick another.
+-- vector(1024) sized for Voyage AI embedding models (voyage-3 family); adjust
+-- if you switch providers.
 -- ----------------------------------------------------------------------------
 CREATE TABLE chunks (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -66,7 +67,7 @@ CREATE TABLE chunks (
     document_id     UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
     chunk_index     INTEGER NOT NULL,
     content         TEXT NOT NULL,
-    embedding       vector(1536),
+    embedding       vector(1024),
     token_count     INTEGER,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
