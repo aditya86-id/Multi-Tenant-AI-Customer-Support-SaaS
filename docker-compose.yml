@@ -43,6 +43,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-support_saas}:${POSTGRES_PASSWORD:-support_saas_dev}@postgres:5432/${POSTGRES_DB:-support_saas}
       REDIS_URL: redis://redis:6379/0
+      UPLOAD_DIR: /app/uploads
     ports:
       - "8000:8000"
     depends_on:
@@ -52,7 +53,31 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
+      - uploads_data:/app/uploads
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: support_saas_worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-support_saas}:${POSTGRES_PASSWORD:-support_saas_dev}@postgres:5432/${POSTGRES_DB:-support_saas}
+      REDIS_URL: redis://redis:6379/0
+      UPLOAD_DIR: /app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - uploads_data:/app/uploads
+    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=2
 
 volumes:
   pg_data:
+  uploads_data:
