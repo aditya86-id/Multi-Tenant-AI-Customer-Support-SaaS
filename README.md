@@ -5,7 +5,7 @@ embeddable AI widget that answers from that tenant's knowledge base using
 RAG, and escalates to a human (creates a ticket) when it's not confident or
 the user asks for one.
 
-## Status: Phase 1 -- scaffold, schema, auth, tenant CRUD
+## Status: Phase 2 -- document ingestion
 
 Implemented so far:
 - FastAPI app structure (`backend/app`)
@@ -18,23 +18,31 @@ Implemented so far:
   filter
 - Basic RBAC: `admin` can create users, everyone can read their own tenant's
   data
-- Docker Compose: Postgres (pgvector image), Redis (ready for phase 2), API
+- Docker Compose: Postgres (pgvector image), Redis, API, Celery worker
+- Document upload endpoint (`.txt`/`.md`/`.pdf`, 10 MB limit), stored per
+  tenant on disk (swap for S3/GCS in production)
+- Celery ingestion task: extracts text, chunks it (~750 tokens, overlapping),
+  embeds each chunk via Voyage AI, stores vectors in `chunks` -- scoped by
+  `tenant_id` end to end, with retry-on-transient-failure and a `failed`
+  status + `error_message` when ingestion can't succeed
+- Document status tracking: `pending -> processing -> ready` or `failed`
 
-Not yet built (coming in later phases): document ingestion, RAG query
-endpoint, agentic escalation via Claude tool use, Next.js admin dashboard,
-embeddable widget, rate limiting / usage logging / retries.
+Not yet built (coming in later phases): RAG query endpoint, agentic
+escalation via Claude tool use, Next.js admin dashboard, embeddable widget,
+per-tenant rate limiting, token usage logging.
 
 ## Running locally
 
 ```bash
 cp .env.example .env
-# edit .env: set a real JWT_SECRET_KEY, and later ANTHROPIC_API_KEY
+# edit .env: set a real JWT_SECRET_KEY, VOYAGE_API_KEY, and later ANTHROPIC_API_KEY
 
 docker compose up --build
 ```
 
 The API will be available at `http://localhost:8000`, with interactive docs
-at `http://localhost:8000/docs`.
+at `http://localhost:8000/docs`. The Celery worker starts alongside it and
+picks up ingestion jobs from Redis.
 
 ## Try it
 
@@ -64,6 +72,17 @@ curl -X POST http://localhost:8000/api/v1/users \
   -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
   -d '{"email": "agent@acme.com", "password": "agentpass123", "role": "agent"}'
+
+# 5. Upload a knowledge-base document (queues async ingestion)
+curl -X POST http://localhost:8000/api/v1/documents \
+  -H "Authorization: Bearer <access_token>" \
+  -F "file=@./faq.md"
+# -> { "id": "...", "status": "pending", ... }
+
+# 6. Poll ingestion status
+curl http://localhost:8000/api/v1/documents/<document_id> \
+  -H "Authorization: Bearer <access_token>"
+# -> status flips pending -> processing -> ready (or failed + error_message)
 ```
 
 ## Multi-tenancy rules (enforced, not just documented)
@@ -79,6 +98,9 @@ curl -X POST http://localhost:8000/api/v1/users \
   this
 - Login requires `tenant_slug + email`, not just email, since the same
   email can exist under different tenants
+- The Celery ingestion task takes `tenant_id` as an explicit argument and
+  filters every query by it, rather than trusting a lookup by `document_id`
+  alone
 
 ## Project layout
 
@@ -86,10 +108,12 @@ curl -X POST http://localhost:8000/api/v1/users \
 backend/
   app/
     core/       settings, JWT + password hashing, auth dependency
-    db/         async SQLAlchemy engine/session
+    db/         async SQLAlchemy engine/session (FastAPI request path)
     models/     SQLAlchemy models (mirrors init-db schema 1:1)
     schemas/    Pydantic request/response models
-    api/routes/ auth, tenants, users
+    services/   text extraction, chunking, Voyage AI embeddings client
+    worker/     Celery app, sync DB session, ingestion task
+    api/routes/ auth, tenants, users, documents
     main.py     FastAPI app, CORS, global error handlers
   init-db/      raw SQL run once by Postgres on first container start
   Dockerfile
@@ -99,7 +123,7 @@ docker-compose.yml
 ## Roadmap
 
 - [x] Phase 1: scaffold, schema, JWT auth, tenant CRUD
-- [ ] Phase 2: document ingestion (upload + Celery chunk/embed into pgvector)
+- [x] Phase 2: document ingestion (upload + Celery chunk/embed into pgvector)
 - [ ] Phase 3: RAG query endpoint with source citations
 - [ ] Phase 4: agentic escalation via Claude tool use (create_ticket tool)
 - [ ] Phase 5: Next.js admin dashboard
