@@ -5,7 +5,7 @@ embeddable AI widget that answers from that tenant's knowledge base using
 RAG, and escalates to a human (creates a ticket) when it's not confident or
 the user asks for one.
 
-## Status: Phase 2 -- document ingestion
+## Status: Phase 3 -- RAG query endpoint
 
 Implemented so far:
 - FastAPI app structure (`backend/app`)
@@ -26,16 +26,24 @@ Implemented so far:
   `tenant_id` end to end, with retry-on-transient-failure and a `failed`
   status + `error_message` when ingestion can't succeed
 - Document status tracking: `pending -> processing -> ready` or `failed`
+- Public `/api/v1/query` endpoint (widget-facing, scoped by `tenant_slug`,
+  no JWT since it's called by anonymous site visitors): embeds the user's
+  message via Voyage, retrieves the top-5 most similar chunks scoped to
+  that tenant, and generates a grounded answer with Anthropic Claude that
+  cites `[Source N]` back to the retrieved chunks
+- Conversations and messages are persisted (`conversation_id` lets the
+  widget continue a thread), including a similarity-based `confidence`
+  score per answer that phase 4's escalation logic will consume
 
-Not yet built (coming in later phases): RAG query endpoint, agentic
-escalation via Claude tool use, Next.js admin dashboard, embeddable widget,
-per-tenant rate limiting, token usage logging.
+Not yet built (coming in later phases): agentic escalation via Claude tool
+use, Next.js admin dashboard, embeddable widget, per-tenant rate limiting,
+token usage logging.
 
 ## Running locally
 
 ```bash
 cp .env.example .env
-# edit .env: set a real JWT_SECRET_KEY, VOYAGE_API_KEY, and later ANTHROPIC_API_KEY
+# edit .env: set a real JWT_SECRET_KEY, VOYAGE_API_KEY, and ANTHROPIC_API_KEY
 
 docker compose up --build
 ```
@@ -83,6 +91,12 @@ curl -X POST http://localhost:8000/api/v1/documents \
 curl http://localhost:8000/api/v1/documents/<document_id> \
   -H "Authorization: Bearer <access_token>"
 # -> status flips pending -> processing -> ready (or failed + error_message)
+
+# 7. Ask a question (public, no auth -- this is what the widget calls)
+curl -X POST http://localhost:8000/api/v1/query \
+  -H "Content-Type: application/json" \
+  -d '{"tenant_slug": "acme", "message": "What is your refund policy?"}'
+# -> { "conversation_id": "...", "answer": "... [Source 1]", "confidence": 0.83, "sources": [...] }
 ```
 
 ## Multi-tenancy rules (enforced, not just documented)
@@ -101,6 +115,10 @@ curl http://localhost:8000/api/v1/documents/<document_id> \
 - The Celery ingestion task takes `tenant_id` as an explicit argument and
   filters every query by it, rather than trusting a lookup by `document_id`
   alone
+- The public `/query` endpoint resolves `tenant_slug` first and scopes
+  every subsequent retrieval/conversation/message operation to that
+  tenant's id -- there is no code path where a chunk from another tenant
+  can be retrieved
 
 ## Project layout
 
@@ -111,9 +129,9 @@ backend/
     db/         async SQLAlchemy engine/session (FastAPI request path)
     models/     SQLAlchemy models (mirrors init-db schema 1:1)
     schemas/    Pydantic request/response models
-    services/   text extraction, chunking, Voyage AI embeddings client
+    services/   text extraction, chunking, Voyage AI embeddings, retrieval, LLM answer generation
     worker/     Celery app, sync DB session, ingestion task
-    api/routes/ auth, tenants, users, documents
+    api/routes/ auth, tenants, users, documents, query
     main.py     FastAPI app, CORS, global error handlers
   init-db/      raw SQL run once by Postgres on first container start
   Dockerfile
@@ -124,7 +142,7 @@ docker-compose.yml
 
 - [x] Phase 1: scaffold, schema, JWT auth, tenant CRUD
 - [x] Phase 2: document ingestion (upload + Celery chunk/embed into pgvector)
-- [ ] Phase 3: RAG query endpoint with source citations
+- [x] Phase 3: RAG query endpoint with source citations
 - [ ] Phase 4: agentic escalation via Claude tool use (create_ticket tool)
 - [ ] Phase 5: Next.js admin dashboard
 - [ ] Phase 6: embeddable JS widget
