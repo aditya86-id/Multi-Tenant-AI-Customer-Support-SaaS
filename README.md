@@ -5,7 +5,7 @@ embeddable AI widget that answers from that tenant's knowledge base using
 RAG, and escalates to a human (creates a ticket) when it's not confident or
 the user asks for one.
 
-## Status: Phase 4 -- agentic escalation
+## Status: Phase 5 -- Next.js admin dashboard
 
 Implemented so far:
 - FastAPI app structure (`backend/app`)
@@ -37,31 +37,45 @@ Implemented so far:
 - **Agentic escalation**: Claude is given a real `create_ticket` tool and
   decides for itself -- using retrieval relevance and the customer's own
   words, not a fixed similarity threshold -- whether a question needs
-  human follow-up. Escalation happens *alongside* the answer: Claude is
-  instructed to always give its best answer even when it also opens a
-  ticket, so the customer is never left with silence. When it escalates,
-  a `Ticket` row is created and the conversation is marked `escalated`
-- `GET /api/v1/tickets` and `GET /api/v1/tickets/{id}` (tenant-scoped,
-  staff-only) let you verify escalation actually created a ticket without
-  needing direct DB access
+  human follow-up. Escalation happens *alongside* the answer, so the
+  customer is never left with silence. `GET /api/v1/tickets` and
+  `GET /api/v1/tickets/{id}` (tenant-scoped, staff-only) expose the result
+- **Next.js admin dashboard** (`dashboard/`): tenant sign up / log in,
+  knowledge-base document upload with live ingestion status (polls while
+  anything is `pending`/`processing`), a ticket queue view, and a basic
+  analytics tab (ticket volume, resolution rate, document ingestion
+  counts). Kept intentionally lean -- plain CSS instead of a component
+  library, one dashboard page with client-side tabs instead of separate
+  routes per section -- to keep the file count down without cutting real
+  functionality
 
-Not yet built (coming in later phases): Next.js admin dashboard, embeddable
-widget, per-tenant rate limiting, token usage logging.
+Not yet built (coming in later phases): embeddable widget, per-tenant rate
+limiting, token usage logging.
 
 ## Running locally
 
+**Backend:**
 ```bash
 cp .env.example .env
 # edit .env: set a real JWT_SECRET_KEY, VOYAGE_API_KEY, and ANTHROPIC_API_KEY
 
 docker compose up --build
 ```
-
 The API will be available at `http://localhost:8000`, with interactive docs
 at `http://localhost:8000/docs`. The Celery worker starts alongside it and
 picks up ingestion jobs from Redis.
 
-## Try it
+**Dashboard:**
+```bash
+cd dashboard
+cp .env.local.example .env.local
+npm install
+npm run dev
+```
+Open `http://localhost:3000` -- it'll redirect to `/login`, where you can
+create a tenant or sign in to an existing one, then land on the dashboard.
+
+## Try it (API directly)
 
 ```bash
 # 1. Create a tenant + admin user
@@ -139,6 +153,9 @@ curl http://localhost:8000/api/v1/tickets \
   every subsequent retrieval/conversation/message/ticket operation to that
   tenant's id -- there is no code path where a chunk or ticket from another
   tenant can be touched
+- The dashboard only ever holds one tenant's JWT client-side and every API
+  call it makes goes through the same tenant-scoped backend routes -- it
+  has no separate, less-scoped data path
 
 ## Project layout
 
@@ -156,6 +173,9 @@ backend/
     main.py     FastAPI app, CORS, global error handlers
   init-db/      raw SQL run once by Postgres on first container start
   Dockerfile
+dashboard/
+  app/          login page, dashboard page (documents/tickets/analytics tabs)
+  lib/api.ts    typed client for the backend API
 docker-compose.yml
 ```
 
@@ -165,6 +185,6 @@ docker-compose.yml
 - [x] Phase 2: document ingestion (upload + Celery chunk/embed into pgvector)
 - [x] Phase 3: RAG query endpoint with source citations
 - [x] Phase 4: agentic escalation via Claude tool use (create_ticket tool)
-- [ ] Phase 5: Next.js admin dashboard
+- [x] Phase 5: Next.js admin dashboard
 - [ ] Phase 6: embeddable JS widget
 - [ ] Phase 7: hardening (rate limiting, usage logging, RBAC, retries)
