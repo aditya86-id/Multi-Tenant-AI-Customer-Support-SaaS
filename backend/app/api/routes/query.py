@@ -7,9 +7,10 @@ from app.models.conversation import Conversation
 from app.models.document import Document
 from app.models.message import Message
 from app.models.tenant import Tenant
+from app.models.ticket import Ticket
 from app.schemas.conversation import QueryRequest, QueryResponse, SourceRef
 from app.services.embeddings import EmbeddingError, embed_query
-from app.services.llm import AnswerGenerationError, generate_answer
+from app.services.llm import AnswerGenerationError, generate_answer_and_maybe_escalate
 from app.services.retrieval import DEFAULT_TOP_K, retrieve_relevant_chunks
 
 router = APIRouter(prefix="/query", tags=["query"])
@@ -67,9 +68,29 @@ async def query(payload: QueryRequest, db: AsyncSession = Depends(get_db)) -> Qu
     confidence = scored_chunks[0][1] if scored_chunks else 0.0
 
     try:
-        answer = generate_answer(payload.message, scored_chunks)
+        result = generate_answer_and_maybe_escalate(
+            payload.message, scored_chunks, retrieval_confidence=confidence
+        )
     except AnswerGenerationError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+
+    answer = result.answer
+    ticket_id = None
+
+    if result.escalated:
+        ticket = Ticket(
+            tenant_id=tenant.id,
+            conversation_id=conversation.id,
+            subject=result.ticket_subject or "Customer support request",
+            summary=result.ticket_summary,
+            priority=result.ticket_priority,
+            escalation_reason=result.escalation_reason,
+            status="open",
+        )
+        db.add(ticket)
+        conversation.status = "escalated"
+        await db.flush()
+        ticket_id = ticket.id
 
     retrieved_chunk_ids = [chunk.id for chunk, _score in scored_chunks]
     db.add(
@@ -105,5 +126,10 @@ async def query(payload: QueryRequest, db: AsyncSession = Depends(get_db)) -> Qu
     ]
 
     return QueryResponse(
-        conversation_id=conversation.id, answer=answer, confidence=confidence, sources=sources
+        conversation_id=conversation.id,
+        answer=answer,
+        confidence=confidence,
+        sources=sources,
+        escalated=result.escalated,
+        ticket_id=ticket_id,
     )
