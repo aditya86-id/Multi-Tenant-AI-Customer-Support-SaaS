@@ -23,6 +23,8 @@ class QueryResponse(BaseModel):
     answer: str
     confidence: float
     sources: list[SourceRef]
+    escalated: bool = False
+    ticket_id: uuid.UUID | None = None
 
 
 class MessageResponse(BaseModel):
