@@ -8,9 +8,11 @@ from app.models.document import Document
 from app.models.message import Message
 from app.models.tenant import Tenant
 from app.models.ticket import Ticket
+from app.models.usage_log import UsageLog
 from app.schemas.conversation import QueryRequest, QueryResponse, SourceRef
 from app.services.embeddings import EmbeddingError, embed_query
-from app.services.llm import AnswerGenerationError, generate_answer_and_maybe_escalate
+from app.services.llm import ANSWER_MODEL, AnswerGenerationError, generate_answer_and_maybe_escalate
+from app.services.rate_limit import RateLimitExceeded, enforce_tenant_rate_limit
 from app.services.retrieval import DEFAULT_TOP_K, retrieve_relevant_chunks
 
 router = APIRouter(prefix="/query", tags=["query"])
@@ -29,6 +31,15 @@ async def query(payload: QueryRequest, db: AsyncSession = Depends(get_db)) -> Qu
     tenant = tenant_result.scalar_one_or_none()
     if tenant is None or not tenant.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown tenant")
+
+    try:
+        await enforce_tenant_rate_limit(str(tenant.id))
+    except RateLimitExceeded as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many requests -- please slow down and try again shortly.",
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        )
 
     if payload.conversation_id is not None:
         conv_result = await db.execute(
@@ -76,6 +87,17 @@ async def query(payload: QueryRequest, db: AsyncSession = Depends(get_db)) -> Qu
 
     answer = result.answer
     ticket_id = None
+
+    db.add(
+        UsageLog(
+            tenant_id=tenant.id,
+            provider="anthropic",
+            model=ANSWER_MODEL,
+            request_type="query_answer",
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
+        )
+    )
 
     if result.escalated:
         ticket = Ticket(
