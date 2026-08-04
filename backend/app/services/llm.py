@@ -120,6 +120,8 @@ class AnswerResult:
     ticket_priority: str = "normal"
     escalation_reason: str | None = None
     raw_tool_inputs: dict = field(default_factory=dict)
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 def generate_answer_and_maybe_escalate(
@@ -150,6 +152,8 @@ def generate_answer_and_maybe_escalate(
 
     text_blocks = [block.text for block in response.content if block.type == "text"]
     answer = "\n".join(text_blocks).strip()
+    input_tokens = getattr(response.usage, "input_tokens", 0)
+    output_tokens = getattr(response.usage, "output_tokens", 0)
 
     tool_call = next(
         (block for block in response.content if block.type == "tool_use" and block.name == "create_ticket"),
@@ -157,7 +161,7 @@ def generate_answer_and_maybe_escalate(
     )
 
     if tool_call is None:
-        return AnswerResult(answer=answer)
+        return AnswerResult(answer=answer, input_tokens=input_tokens, output_tokens=output_tokens)
 
     tool_input = tool_call.input or {}
 
@@ -177,4 +181,6 @@ def generate_answer_and_maybe_escalate(
         ticket_priority=tool_input.get("priority", "normal"),
         escalation_reason=tool_input.get("escalation_reason", "low_confidence"),
         raw_tool_inputs=tool_input,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
     )
