@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     chunk_size_chars: int = 3000  # ~750 tokens at ~4 chars/token
     chunk_overlap_chars: int = 300
 
+    # Rate limiting (phase 7) -- per tenant, not global, so one tenant's
+    # traffic can never starve another's quota
+    rate_limit_per_minute: int = 30
+
     @property
     def is_production(self) -> bool:
         return self.environment.lower() == "production"
