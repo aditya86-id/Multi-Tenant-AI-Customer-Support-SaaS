@@ -5,7 +5,7 @@ embeddable AI widget that answers from that tenant's knowledge base using
 RAG, and escalates to a human (creates a ticket) when it's not confident or
 the user asks for one.
 
-## Status: Phase 5 -- Next.js admin dashboard
+## Status: Phase 6 -- embeddable widget
 
 Implemented so far:
 - FastAPI app structure (`backend/app`)
@@ -41,16 +41,19 @@ Implemented so far:
   customer is never left with silence. `GET /api/v1/tickets` and
   `GET /api/v1/tickets/{id}` (tenant-scoped, staff-only) expose the result
 - **Next.js admin dashboard** (`dashboard/`): tenant sign up / log in,
-  knowledge-base document upload with live ingestion status (polls while
-  anything is `pending`/`processing`), a ticket queue view, and a basic
-  analytics tab (ticket volume, resolution rate, document ingestion
-  counts). Kept intentionally lean -- plain CSS instead of a component
-  library, one dashboard page with client-side tabs instead of separate
-  routes per section -- to keep the file count down without cutting real
-  functionality
+  knowledge-base document upload with live ingestion status, a ticket
+  queue view, and a basic analytics tab
+- **Embeddable widget** (`widget/widget.js`): a single, dependency-free
+  JavaScript file a tenant drops into their site as one `<script>` tag
+  with two data attributes (`data-tenant-slug`, `data-api-url`). Renders a
+  floating chat bubble, talks directly to the public `/query` endpoint,
+  persists the conversation in `sessionStorage` so a page reload doesn't
+  lose context, and shows a subtle note when the AI has escalated to a
+  human. `widget/demo.html` shows the full integration on a mock page
 
-Not yet built (coming in later phases): embeddable widget, per-tenant rate
-limiting, token usage logging.
+Not yet built (coming in phase 7): per-tenant rate limiting, token usage
+logging, deeper RBAC hardening, ingestion retry policy beyond what's
+already in the Celery task.
 
 ## Running locally
 
@@ -74,6 +77,16 @@ npm run dev
 ```
 Open `http://localhost:3000` -- it'll redirect to `/login`, where you can
 create a tenant or sign in to an existing one, then land on the dashboard.
+
+**Widget:**
+```bash
+cd widget
+python3 -m http.server 5500
+```
+Open `http://localhost:5500/demo.html` (with the backend already running)
+to see the chat bubble live against a real tenant. To embed it on any other
+page, copy the one `<script>` tag from `demo.html` and update the two data
+attributes.
 
 ## Try it (API directly)
 
@@ -149,13 +162,14 @@ curl http://localhost:8000/api/v1/tickets \
 - The Celery ingestion task takes `tenant_id` as an explicit argument and
   filters every query by it, rather than trusting a lookup by `document_id`
   alone
-- The public `/query` endpoint resolves `tenant_slug` first and scopes
-  every subsequent retrieval/conversation/message/ticket operation to that
-  tenant's id -- there is no code path where a chunk or ticket from another
-  tenant can be touched
-- The dashboard only ever holds one tenant's JWT client-side and every API
-  call it makes goes through the same tenant-scoped backend routes -- it
-  has no separate, less-scoped data path
+- The public `/query` endpoint (used by both the dashboard's "try it" flow
+  and the widget) resolves `tenant_slug` first and scopes every subsequent
+  retrieval/conversation/message/ticket operation to that tenant's id --
+  there is no code path where a chunk or ticket from another tenant can be
+  touched
+- The widget only ever knows a `tenant_slug` (never a raw `tenant_id` or
+  any staff credential), so embedding it on a tenant's site can't leak
+  access to another tenant's data or to any authenticated dashboard route
 
 ## Project layout
 
@@ -176,6 +190,9 @@ backend/
 dashboard/
   app/          login page, dashboard page (documents/tickets/analytics tabs)
   lib/api.ts    typed client for the backend API
+widget/
+  widget.js     the embeddable widget itself (no dependencies, no build step)
+  demo.html     example page showing the embed
 docker-compose.yml
 ```
 
@@ -186,5 +203,5 @@ docker-compose.yml
 - [x] Phase 3: RAG query endpoint with source citations
 - [x] Phase 4: agentic escalation via Claude tool use (create_ticket tool)
 - [x] Phase 5: Next.js admin dashboard
-- [ ] Phase 6: embeddable JS widget
+- [x] Phase 6: embeddable JS widget
 - [ ] Phase 7: hardening (rate limiting, usage logging, RBAC, retries)
