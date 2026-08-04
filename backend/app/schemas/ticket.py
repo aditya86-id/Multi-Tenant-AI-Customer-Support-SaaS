@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TicketResponse(BaseModel):
@@ -18,3 +18,11 @@ class TicketResponse(BaseModel):
     escalation_reason: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class TicketUpdateRequest(BaseModel):
+    """All fields optional -- only the ones the caller sends get updated."""
+
+    status: str | None = Field(default=None, pattern="^(open|in_progress|resolved|closed)$")
+    priority: str | None = Field(default=None, pattern="^(low|normal|high|urgent)$")
+    assigned_to: uuid.UUID | None = None
