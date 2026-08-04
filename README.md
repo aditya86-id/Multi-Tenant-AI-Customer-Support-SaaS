@@ -5,19 +5,22 @@ embeddable AI widget that answers from that tenant's knowledge base using
 RAG, and escalates to a human (creates a ticket) when it's not confident or
 the user asks for one.
 
-## Status: Phase 6 -- embeddable widget
+## Status: Phase 7 -- hardening (feature-complete)
 
 Implemented so far:
 - FastAPI app structure (`backend/app`)
-- Full Postgres schema with pgvector (`backend/init-db/001_init.sql`):
-  tenants, users, documents, chunks (embeddings), conversations, messages,
-  tickets -- every table carries `tenant_id`
+- Full Postgres schema with pgvector (`backend/init-db/001_init.sql`,
+  `002_usage_logs.sql`): tenants, users, documents, chunks (embeddings),
+  conversations, messages, tickets, usage_logs -- every table carries
+  `tenant_id`
 - JWT auth: tenant signup (creates tenant + first admin), login
 - Tenant-scoped `CurrentUser` dependency (`app/core/deps.py`) used by every
   protected route -- no query in the app is allowed to skip the tenant_id
   filter
-- Basic RBAC: `admin` can create users, everyone can read their own tenant's
-  data
+- RBAC: `admin` can create users; admin and agent can upload documents and
+  update tickets (status, priority, assignment) -- ticket assignment is
+  validated against the tenant so a ticket can never be assigned to a user
+  outside it
 - Docker Compose: Postgres (pgvector image), Redis, API, Celery worker
 - Document upload endpoint (`.txt`/`.md`/`.pdf`, 10 MB limit), stored per
   tenant on disk (swap for S3/GCS in production)
@@ -38,22 +41,22 @@ Implemented so far:
   decides for itself -- using retrieval relevance and the customer's own
   words, not a fixed similarity threshold -- whether a question needs
   human follow-up. Escalation happens *alongside* the answer, so the
-  customer is never left with silence. `GET /api/v1/tickets` and
-  `GET /api/v1/tickets/{id}` (tenant-scoped, staff-only) expose the result
+  customer is never left with silence. `GET/PATCH /api/v1/tickets/{id}`
+  (tenant-scoped, staff-only) manage the result
 - **Next.js admin dashboard** (`dashboard/`): tenant sign up / log in,
   knowledge-base document upload with live ingestion status, a ticket
   queue view, and a basic analytics tab
 - **Embeddable widget** (`widget/widget.js`): a single, dependency-free
-  JavaScript file a tenant drops into their site as one `<script>` tag
-  with two data attributes (`data-tenant-slug`, `data-api-url`). Renders a
-  floating chat bubble, talks directly to the public `/query` endpoint,
-  persists the conversation in `sessionStorage` so a page reload doesn't
-  lose context, and shows a subtle note when the AI has escalated to a
-  human. `widget/demo.html` shows the full integration on a mock page
-
-Not yet built (coming in phase 7): per-tenant rate limiting, token usage
-logging, deeper RBAC hardening, ingestion retry policy beyond what's
-already in the Celery task.
+  JavaScript file, one `<script>` tag with two data attributes
+- **Per-tenant rate limiting**: `/api/v1/query` is limited to
+  `RATE_LIMIT_PER_MINUTE` (default 30) requests/minute, keyed by
+  `tenant_id` in Redis -- one tenant's traffic (or an abusive client)
+  can never eat into another tenant's quota, and the limit holds even
+  across multiple API instances since it's Redis-backed, not in-memory.
+  Returns `429` with a `Retry-After` header when exceeded
+- **Per-tenant token usage logging**: every `/query` call records Anthropic
+  input/output token counts to `usage_logs`, scoped by `tenant_id` -- the
+  foundation for real per-tenant cost tracking or billing
 
 ## Running locally
 
@@ -141,9 +144,17 @@ curl -X POST http://localhost:8000/api/v1/query \
   -d '{"tenant_slug": "acme", "message": "Can I talk to a real person about my account?"}'
 # -> escalated: true, ticket_id set -- Claude decided to open a ticket
 
-# 9. Verify the ticket as staff
+# 9. Verify + update the ticket as staff
 curl http://localhost:8000/api/v1/tickets \
   -H "Authorization: Bearer <access_token>"
+
+curl -X PATCH http://localhost:8000/api/v1/tickets/<ticket_id> \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "resolved"}'
+
+# 10. Hit /query 31+ times in a minute from the same tenant to see the
+#     rate limit kick in (429 + Retry-After header)
 ```
 
 ## Multi-tenancy rules (enforced, not just documented)
@@ -164,12 +175,16 @@ curl http://localhost:8000/api/v1/tickets \
   alone
 - The public `/query` endpoint (used by both the dashboard's "try it" flow
   and the widget) resolves `tenant_slug` first and scopes every subsequent
-  retrieval/conversation/message/ticket operation to that tenant's id --
-  there is no code path where a chunk or ticket from another tenant can be
-  touched
+  retrieval/conversation/message/ticket/usage-log operation to that
+  tenant's id -- there is no code path where a chunk or ticket from
+  another tenant can be touched
 - The widget only ever knows a `tenant_slug` (never a raw `tenant_id` or
   any staff credential), so embedding it on a tenant's site can't leak
   access to another tenant's data or to any authenticated dashboard route
+- The rate limiter is keyed by `tenant_id`, never global, so no tenant can
+  be starved by another tenant's traffic
+- Ticket assignment (`PATCH /tickets/{id}`) validates that `assigned_to`
+  is a user in the *same* tenant before saving it
 
 ## Project layout
 
@@ -181,7 +196,8 @@ backend/
     models/     SQLAlchemy models (mirrors init-db schema 1:1)
     schemas/    Pydantic request/response models
     services/   text extraction, chunking, Voyage AI embeddings, retrieval,
-                LLM answer generation + agentic escalation (create_ticket tool)
+                LLM answer generation + agentic escalation (create_ticket tool),
+                per-tenant rate limiting
     worker/     Celery app, sync DB session, ingestion task
     api/routes/ auth, tenants, users, documents, query, tickets
     main.py     FastAPI app, CORS, global error handlers
@@ -204,4 +220,15 @@ docker-compose.yml
 - [x] Phase 4: agentic escalation via Claude tool use (create_ticket tool)
 - [x] Phase 5: Next.js admin dashboard
 - [x] Phase 6: embeddable JS widget
-- [ ] Phase 7: hardening (rate limiting, usage logging, RBAC, retries)
+- [x] Phase 7: hardening (rate limiting, usage logging, RBAC, retries)
+
+## Ideas for what's next (beyond the original 7 phases)
+
+- A dashboard view for `usage_logs` (cost per tenant over time)
+- Alembic migrations instead of raw numbered SQL files, once the schema
+  needs to evolve on a live database instead of a fresh container
+- Voyage embedding usage logging (currently only Anthropic calls are
+  logged) for complete per-tenant cost visibility
+- Deploying it -- see conversation history for the recommended stack
+  (Railway for the backend + Postgres/Redis, Vercel for the dashboard and
+  widget)
