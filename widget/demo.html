@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Acme Inc -- widget demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        max-width: 640px;
+        margin: 60px auto;
+        padding: 0 20px;
+        color: #222;
+      }
+      h1 {
+        font-size: 22px;
+      }
+      code {
+        background: #f2f2f2;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Acme Inc</h1>
+    <p>
+      This is a stand-in for a tenant's real website. The chat bubble in the
+      bottom-right corner is the embedded support widget -- everything below
+      this line is just placeholder content to show the widget floating over
+      a normal page.
+    </p>
+    <p>
+      To try it against your own local backend, run the API
+      (<code>docker compose up --build</code> from the repo root), create a
+      tenant via <code>/api/v1/auth/signup</code>, upload a document, and
+      update the <code>data-tenant-slug</code> below to match.
+    </p>
+
+    <!--
+      This is the entire integration: one script tag, two data attributes.
+      No SDK install, no build step required on the tenant's side.
+    -->
+    <script
+      src="./widget.js"
+      data-tenant-slug="acme"
+      data-api-url="http://localhost:8000"
+      defer
+    ></script>
+  </body>
+</html>
