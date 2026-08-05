@@ -17,6 +17,25 @@ import {
 
 type Tab = "documents" | "tickets" | "analytics";
 
+const NAV_ITEMS: { id: Tab; label: string; icon: string }[] = [
+  { id: "documents", label: "Documents", icon: "\u25A4" },
+  { id: "tickets", label: "Tickets", icon: "\u2691" },
+  { id: "analytics", label: "Analytics", icon: "\u25B3" },
+];
+
+// Maps backend status strings to the rail's three-state visual language.
+function railClass(status: string): "rail-good" | "rail-warn" | "rail-bad" {
+  if (status === "ready" || status === "resolved" || status === "closed") return "rail-good";
+  if (status === "failed" || status === "urgent" || status === "high") return "rail-bad";
+  return "rail-warn";
+}
+function statusWordClass(status: string): "good" | "warn" | "bad" {
+  const rail = railClass(status);
+  if (rail === "rail-good") return "good";
+  if (rail === "rail-bad") return "bad";
+  return "warn";
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [tenant, setTenant] = useState<Tenant | null>(null);
@@ -90,8 +109,10 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="container">
-        <p className="muted">Loading...</p>
+      <div className="shell">
+        <div className="content">
+          <p className="empty-state">Loading dashboard...</p>
+        </div>
       </div>
     );
   }
@@ -100,41 +121,55 @@ export default function DashboardPage() {
   const resolutionRate = tickets.length ? Math.round((resolvedTickets / tickets.length) * 100) : 0;
   const readyDocs = documents.filter((d) => d.status === "ready").length;
   const failedDocs = documents.filter((d) => d.status === "failed").length;
+  const openTickets = tickets.filter((t) => t.status === "open" || t.status === "in_progress").length;
+
+  const activeLabel = NAV_ITEMS.find((n) => n.id === tab)?.label ?? "";
 
   return (
-    <div className="container">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div>
-          <h1 style={{ margin: 0 }}>{tenant?.name ?? "Dashboard"}</h1>
-          <p className="muted" style={{ margin: 0 }}>tenant: {tenant?.slug}</p>
+    <div className="shell">
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <div className="tenant-name">{tenant?.name ?? "Dashboard"}</div>
+          <div className="tenant-slug">{tenant?.slug}</div>
         </div>
-        <button className="btn-secondary" onClick={handleLogout}>
-          Log out
-        </button>
-      </div>
 
-      {error && (
-        <div className="card">
-          <p className="error-text" style={{ margin: 0 }}>{error}</p>
-        </div>
-      )}
+        <nav className="nav-group">
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              className={`nav-item ${tab === item.id ? "active" : ""}`}
+              onClick={() => setTab(item.id)}
+            >
+              <span className="nav-icon">{item.icon}</span>
+              {item.label}
+              {item.id === "tickets" && openTickets > 0 && (
+                <span style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: 11 }}>
+                  {openTickets}
+                </span>
+              )}
+            </button>
+          ))}
+        </nav>
 
-      <div className="tabs">
-        {(["documents", "tickets", "analytics"] as Tab[]).map((t) => (
-          <button
-            key={t}
-            className={`tab ${tab === t ? "active" : ""}`}
-            onClick={() => setTab(t)}
-          >
-            {t[0].toUpperCase() + t.slice(1)}
+        <div className="sidebar-footer">
+          <button className="nav-item" onClick={handleLogout}>
+            <span className="nav-icon">&larr;</span>
+            Log out
           </button>
-        ))}
-      </div>
+        </div>
+      </aside>
 
-      {tab === "documents" && (
-        <div className="card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <h2 style={{ margin: 0, fontSize: 18 }}>Knowledge base documents</h2>
+      <main className="content">
+        <div className="page-header">
+          <div>
+            <h1>{activeLabel}</h1>
+            <div className="page-sub">
+              {tab === "documents" && "Files powering this tenant's AI answers"}
+              {tab === "tickets" && "Conversations the AI escalated to a human"}
+              {tab === "analytics" && "Usage at a glance"}
+            </div>
+          </div>
+          {tab === "documents" && (
             <label className="btn" style={{ display: "inline-block" }}>
               {uploading ? "Uploading..." : "Upload document"}
               <input
@@ -145,110 +180,87 @@ export default function DashboardPage() {
                 style={{ display: "none" }}
               />
             </label>
-          </div>
-          {documents.length === 0 ? (
-            <p className="muted">No documents uploaded yet.</p>
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Filename</th>
-                  <th>Status</th>
-                  <th>Uploaded</th>
-                </tr>
-              </thead>
-              <tbody>
-                {documents.map((doc) => (
-                  <tr key={doc.id}>
-                    <td>{doc.filename}</td>
-                    <td>
-                      <span className={`badge badge-${doc.status}`}>{doc.status}</span>
-                      {doc.status === "failed" && doc.error_message && (
-                        <div className="muted" style={{ marginTop: 4 }}>{doc.error_message}</div>
-                      )}
-                    </td>
-                    <td className="muted">{new Date(doc.created_at).toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           )}
         </div>
-      )}
 
-      {tab === "tickets" && (
-        <div className="card">
-          <h2 style={{ margin: "0 0 12px", fontSize: 18 }}>Ticket queue</h2>
-          {tickets.length === 0 ? (
-            <p className="muted">No tickets yet -- escalations from the AI will show up here.</p>
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Subject</th>
-                  <th>Priority</th>
-                  <th>Status</th>
-                  <th>Reason</th>
-                  <th>Opened</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tickets.map((ticket) => (
-                  <tr key={ticket.id}>
-                    <td>
-                      {ticket.subject}
-                      {ticket.summary && (
-                        <div className="muted" style={{ marginTop: 4 }}>{ticket.summary}</div>
-                      )}
-                    </td>
-                    <td>
-                      <span className={`badge badge-${ticket.priority}`}>{ticket.priority}</span>
-                    </td>
-                    <td>
-                      <span className={`badge badge-${ticket.status}`}>{ticket.status}</span>
-                    </td>
-                    <td className="muted">{ticket.escalation_reason ?? "-"}</td>
-                    <td className="muted">{new Date(ticket.created_at).toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
+        {error && <div className="error-banner">{error}</div>}
 
-      {tab === "analytics" && (
-        <div className="card">
-          <h2 style={{ margin: "0 0 16px", fontSize: 18 }}>Overview</h2>
-          <div className="stat-grid">
-            <div>
-              <div className="stat-value">{tickets.length}</div>
-              <div className="muted">Total tickets</div>
-            </div>
-            <div>
-              <div className="stat-value">{resolutionRate}%</div>
-              <div className="muted">Resolution rate</div>
-            </div>
-            <div>
-              <div className="stat-value">{documents.length}</div>
-              <div className="muted">Documents uploaded</div>
-            </div>
-            <div>
-              <div className="stat-value">{readyDocs}</div>
-              <div className="muted">Ready for retrieval</div>
-            </div>
-            <div>
-              <div className="stat-value">{failedDocs}</div>
-              <div className="muted">Failed ingestion</div>
-            </div>
+        {tab === "documents" && (
+          <div className="card">
+            {documents.length === 0 ? (
+              <div className="empty-state">
+                No documents yet. Upload a .txt, .md, or .pdf to give the AI something to answer from.
+              </div>
+            ) : (
+              documents.map((doc) => (
+                <div key={doc.id} className={`rail-row ${railClass(doc.status)}`}>
+                  <div className="rail-main">
+                    <div className="rail-title">{doc.filename}</div>
+                    {doc.status === "failed" && doc.error_message && (
+                      <div className="rail-sub">{doc.error_message}</div>
+                    )}
+                  </div>
+                  <span className={`status-word ${statusWordClass(doc.status)}`}>{doc.status}</span>
+                  <span className="rail-meta">{new Date(doc.created_at).toLocaleDateString()}</span>
+                </div>
+              ))
+            )}
           </div>
-          <p className="muted" style={{ marginTop: 20 }}>
-            Escalation rate and message-volume trends need a conversations/messages
-            listing endpoint, which isn&apos;t built yet -- straightforward to add
-            as a phase 7 follow-up once per-tenant usage logging is in place.
-          </p>
-        </div>
-      )}
+        )}
+
+        {tab === "tickets" && (
+          <div className="card">
+            {tickets.length === 0 ? (
+              <div className="empty-state">
+                No tickets yet. The AI opens one automatically when it can&apos;t answer confidently
+                or a customer asks for a human.
+              </div>
+            ) : (
+              tickets.map((ticket) => (
+                <div key={ticket.id} className={`rail-row ${railClass(ticket.priority)}`}>
+                  <div className="rail-main">
+                    <div className="rail-title">{ticket.subject}</div>
+                    {ticket.summary && <div className="rail-sub">{ticket.summary}</div>}
+                  </div>
+                  <span className={`status-word ${statusWordClass(ticket.status)}`}>{ticket.status}</span>
+                  <span className="rail-meta">{new Date(ticket.created_at).toLocaleDateString()}</span>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {tab === "analytics" && (
+          <div className="card">
+            <div className="stat-grid">
+              <div className="stat-block">
+                <div className="stat-value">{tickets.length}</div>
+                <div className="stat-label">Total tickets</div>
+              </div>
+              <div className="stat-block">
+                <div className="stat-value">{resolutionRate}%</div>
+                <div className="stat-label">Resolution rate</div>
+              </div>
+              <div className="stat-block">
+                <div className="stat-value">{documents.length}</div>
+                <div className="stat-label">Documents</div>
+              </div>
+              <div className="stat-block">
+                <div className="stat-value">{readyDocs}</div>
+                <div className="stat-label">Ready for retrieval</div>
+              </div>
+              <div className="stat-block">
+                <div className="stat-value">{failedDocs}</div>
+                <div className="stat-label">Failed ingestion</div>
+              </div>
+            </div>
+            <p className="page-sub" style={{ marginTop: 20 }}>
+              Escalation rate and message-volume trends need a conversations listing endpoint,
+              which isn&apos;t built yet.
+            </p>
+          </div>
+        )}
+      </main>
     </div>
   );
 }
