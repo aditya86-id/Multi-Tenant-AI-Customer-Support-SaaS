@@ -33,12 +33,15 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="container" style={{ maxWidth: 420, paddingTop: 80 }}>
-      <div className="card">
-        <h1 style={{ marginTop: 0 }}>
-          {mode === "login" ? "Sign in" : "Create your tenant"}
-        </h1>
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <div className="auth-shell">
+      <div className="auth-card">
+        <h1>{mode === "login" ? "Sign in" : "Create your tenant"}</h1>
+        <p className="auth-sub">
+          {mode === "login"
+            ? "Access your support dashboard."
+            : "Set up a new workspace for your team."}
+        </p>
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {mode === "signup" && (
             <label>
               Company name
@@ -47,7 +50,7 @@ export default function LoginPage() {
                 required
                 value={tenantName}
                 onChange={(e) => setTenantName(e.target.value)}
-                style={{ width: "100%", marginTop: 4 }}
+                style={{ width: "100%", marginTop: 5 }}
               />
             </label>
           )}
@@ -60,7 +63,7 @@ export default function LoginPage() {
               placeholder="acme"
               value={tenantSlug}
               onChange={(e) => setTenantSlug(e.target.value)}
-              style={{ width: "100%", marginTop: 4 }}
+              style={{ width: "100%", marginTop: 5 }}
             />
           </label>
           <label>
@@ -70,7 +73,7 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              style={{ width: "100%", marginTop: 4 }}
+              style={{ width: "100%", marginTop: 5 }}
             />
           </label>
           <label>
@@ -81,20 +84,19 @@ export default function LoginPage() {
               minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              style={{ width: "100%", marginTop: 4 }}
+              style={{ width: "100%", marginTop: 5 }}
             />
           </label>
-          {error && <p className="error-text">{error}</p>}
-          <button className="btn" type="submit" disabled={loading}>
+          {error && <div className="error-banner">{error}</div>}
+          <button className="btn" type="submit" disabled={loading} style={{ marginTop: 4 }}>
             {loading ? "Please wait..." : mode === "login" ? "Sign in" : "Create tenant"}
           </button>
         </form>
-        <p className="muted" style={{ marginTop: 16 }}>
+        <p className="auth-sub" style={{ marginTop: 18, marginBottom: 0 }}>
           {mode === "login" ? "New here?" : "Already have a tenant?"}{" "}
           <button
             type="button"
-            className="btn-secondary"
-            style={{ padding: "2px 8px" }}
+            className="btn-link"
             onClick={() => {
               setError(null);
               setMode(mode === "login" ? "signup" : "login");
