@@ -1,164 +1,412 @@
+/* ============================================================================
+   Design tokens
+   "Ops console" direction: this is a tool support staff live in while
+   triaging tickets and watching ingestion jobs -- so the signature device
+   is a status rail (a colored left border) applied consistently to every
+   card and row that has a state, rather than badges scattered everywhere.
+   ============================================================================ */
 :root {
-  --bg: #0f1115;
-  --panel: #171a21;
-  --border: #2a2f3a;
-  --text: #e6e8eb;
-  --muted: #9aa1ac;
-  --accent: #5b8def;
-  --danger: #e05260;
-  --success: #3fbf7f;
-  --warning: #e0a940;
+  --bg: #0b0e14;
+  --surface: #12161f;
+  --surface-raised: #171c27;
+  --border: #232838;
+  --border-soft: #1a1f2b;
+
+  --text: #e4e7ee;
+  --text-muted: #8891a3;
+  --text-faint: #5b6479;
+
+  --accent: #6c8cff;
+  --accent-soft: rgba(108, 140, 255, 0.12);
+
+  --signal-good: #34c77b;
+  --signal-good-soft: rgba(52, 199, 123, 0.12);
+  --signal-warn: #e8a63b;
+  --signal-warn-soft: rgba(232, 166, 59, 0.12);
+  --signal-bad: #f0576b;
+  --signal-bad-soft: rgba(240, 87, 107, 0.12);
+  --signal-neutral: #8891a3;
+  --signal-neutral-soft: rgba(136, 145, 163, 0.12);
+
+  --radius: 8px;
+  --radius-sm: 5px;
+
+  --font-display: var(--font-display-loaded), "Space Grotesk", ui-sans-serif, sans-serif;
+  --font-body: var(--font-body-loaded), "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-loaded), "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html,
+body {
+  height: 100%;
+}
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
 a {
   color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
 }
 
 button {
   cursor: pointer;
   font-family: inherit;
 }
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 input,
-select,
 textarea {
   font-family: inherit;
-  background: var(--panel);
+  font-size: 14px;
+  background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  transition: border-color 0.15s ease;
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-faint);
+}
+input:focus,
+textarea:focus {
+  border-color: var(--accent);
+}
+
+label {
+  font-size: 13px;
+  color: var(--text-muted);
+  display: block;
+}
+
+/* ---- Layout shell: fixed sidebar + content ---- */
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 216px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border-soft);
+  padding: 20px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.sidebar-brand {
+  padding: 0 8px;
+}
+.sidebar-brand .tenant-name {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-brand .tenant-slug {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  width: 100%;
+}
+.nav-item:hover {
+  background: var(--surface-raised);
+  color: var(--text);
+}
+.nav-item.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.nav-item .nav-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.container {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 24px;
+.sidebar-footer {
+  margin-top: auto;
 }
 
+.content {
+  flex: 1;
+  min-width: 0;
+  padding: 28px 36px;
+  max-width: 1040px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+.page-header h1 {
+  font-size: 20px;
+}
+.page-header .page-sub {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+/* ---- Cards ---- */
 .card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 20px;
-  margin-bottom: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 18px 20px;
 }
 
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ---- Buttons ---- */
 .btn {
   background: var(--accent);
-  color: white;
+  color: #0b0e14;
   border: none;
-  border-radius: 6px;
-  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font-size: 13px;
   font-weight: 600;
+  transition: opacity 0.15s ease;
 }
-
+.btn:hover {
+  opacity: 0.88;
+}
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
-
 .btn-secondary {
   background: transparent;
   border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.btn-secondary:hover {
   color: var(--text);
+  border-color: var(--text-faint);
 }
-
-.tabs {
-  display: flex;
-  gap: 8px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 20px;
-}
-
-.tab {
-  background: transparent;
+.btn-link {
+  background: none;
   border: none;
-  color: var(--muted);
-  padding: 10px 4px;
-  border-bottom: 2px solid transparent;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0;
 }
 
-.tab.active {
+/* ---- Signature device: status rail ----
+   A 3px colored left border, applied to any row/card representing state
+   (document ingestion status, ticket priority). One visual language for
+   "state" across the whole app instead of badges duplicated everywhere. */
+.rail-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--signal-neutral);
+  background: var(--surface-raised);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  margin-bottom: 6px;
+}
+.rail-row:last-child {
+  margin-bottom: 0;
+}
+.rail-good {
+  border-left-color: var(--signal-good);
+}
+.rail-warn {
+  border-left-color: var(--signal-warn);
+}
+.rail-bad {
+  border-left-color: var(--signal-bad);
+}
+
+.rail-main {
+  flex: 1;
+  min-width: 0;
+}
+.rail-title {
+  font-size: 13.5px;
   color: var(--text);
-  border-bottom-color: var(--accent);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-
-.badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 999px;
+.rail-sub {
   font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rail-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.status-word {
+  font-size: 11px;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.status-word.good {
+  color: var(--signal-good);
+}
+.status-word.warn {
+  color: var(--signal-warn);
+}
+.status-word.bad {
+  color: var(--signal-bad);
+}
+.status-word.neutral {
+  color: var(--signal-neutral);
 }
 
-.badge-ready,
-.badge-resolved,
-.badge-closed {
-  background: rgba(63, 191, 127, 0.15);
-  color: var(--success);
+/* ---- Empty / loading states ---- */
+.empty-state {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
 }
 
-.badge-pending,
-.badge-processing,
-.badge-open {
-  background: rgba(224, 169, 64, 0.15);
-  color: var(--warning);
+.error-banner {
+  background: var(--signal-bad-soft);
+  border: 1px solid rgba(240, 87, 107, 0.3);
+  color: var(--signal-bad);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-bottom: 16px;
 }
 
-.badge-failed,
-.badge-urgent,
-.badge-high {
-  background: rgba(224, 82, 96, 0.15);
-  color: var(--danger);
-}
-
-.error-text {
-  color: var(--danger);
-  font-size: 14px;
-}
-
-.muted {
-  color: var(--muted);
-  font-size: 14px;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-th,
-td {
-  text-align: left;
-  padding: 8px 6px;
-  border-bottom: 1px solid var(--border);
-  font-size: 14px;
-}
-
-th {
-  color: var(--muted);
-  font-weight: 600;
-}
-
+/* ---- Stats ---- */
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+}
+.stat-block {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+}
+.stat-value {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--text);
+}
+.stat-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
 }
 
-.stat-value {
-  font-size: 28px;
-  font-weight: 700;
+/* ---- Auth page ---- */
+.auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 28px;
+}
+.auth-card h1 {
+  font-size: 19px;
+  margin-bottom: 6px;
+}
+.auth-sub {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-bottom: 20px;
 }
